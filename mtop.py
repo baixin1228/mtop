@@ -30,7 +30,7 @@ def getchar(timeout):
 
 def check_input(timeout = 1):
 	userInput = getchar(timeout)
-	if userInput == "q":
+	if userInput.lower() == "q":
 		sys.exit(0)
 
 def format_number(number):
@@ -333,6 +333,12 @@ def run():
 								process_info_sub = {}
 								process_info_sub["pid"] = process_info["pid"]
 								process_info_sub["comm"] = process_info["comm"]
+								if os.path.exists(item.path + "/cmdline"):
+									with open(item.path + "/cmdline", "r") as f_cmd:
+										 cmdline = f_cmd.read()
+										 if cmdline != "":
+										 	process_info_sub["comm"] = cmdline
+
 								process_info_sub["task_state"] = process_info["task_state"]
 								process_info_sub["userid"] = process_info["userid"]
 								process_info_sub["utime"] = process_info["utime"] - process_infos_last[key]["utime"]
@@ -370,7 +376,7 @@ def run():
 
 			col = tty_size[0] - 72
 			if height > 0:
-				print_strs_fix.append(f"\033[7m{'PID':^10}|{'USER':^14}|{'CORE':^4}|{'MEM':^8}|{'%MEM':>5}|{'%CPU':>5}|{'TIME':^8}|{'STATE':^5}| {'COMMAND':<{col}}\033[0m\n"[:tty_size[0] + 8])
+				print_strs_fix.append(f"\033[7m{'PID':^10}|{'USER':^14}|{'CORE':^4}|{'MEM':^8}|{'%MEM':>5}|{'%CPU':>5}|{'TIME':^8}|{'STATE':^5}| {'COMMAND':<{col}}\033[0m"[:tty_size[0] + 8] + "\n")
 				height = height - 1
 
 			process_info_sort = sorted(process_infos_sub.values(), key=lambda d: d["time"], reverse=True)
@@ -380,7 +386,7 @@ def run():
 						pid_user = userid_to_name[item['userid']]
 					else:
 						pid_user = item['userid']
-					print_strs_fix.append(f" {item['pid']:>9}   {pid_user:<12} {item['task_cpu']:>3} {format_number(item['rss']):>7}   {item['mem_usage']:>4.1f}% {item['cpu_usage']:>4.1f}% {item['time_sum']:>8} {item['task_state']:^5}  {item['comm']:<{col}}\n"[:tty_size[0]])
+					print_strs_fix.append(f" {item['pid']:>9}   {pid_user:<12} {item['task_cpu']:>3} {format_number(item['rss']):>7}   {item['mem_usage']:>4.1f}% {item['cpu_usage']:>4.1f}% {item['time_sum']:>8} {item['task_state']:^5}  {item['comm']:<{col}}"[:tty_size[0]] + "\n")
 					height = height - 1
 
 		print("".join(print_strs_fix), end="", flush=True)
