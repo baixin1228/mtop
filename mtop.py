@@ -11,25 +11,31 @@ import sys
 import tty
 import time
 import select
+import signal
 import termios
 import platform
 import resource
 import datetime
 
-def getchar(timeout):
+exit = False
+def getchar():
 	c = ''
 	fd = sys.stdin.fileno()
 	old_settings = termios.tcgetattr(fd)
+	new_term = termios.tcgetattr(fd)
 	try:
-		tty.setraw(fd)
-		if select.select([sys.stdin], [], [], timeout)[0]:
+		# new_term[3] = (new_term[3] & ~termios.ICANON & ~termios.ECHO)
+		new_term[3] = (new_term[3] & ~(termios.ICANON | termios.ECHO))
+		termios.tcsetattr(fd, termios.TCSANOW, new_term)
+		if select.select([sys.stdin], [], [], 0)[0]:
 			c = sys.stdin.read(1)
 	finally:
 		termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+		sys.stdout.flush()
 	return c
 
-def check_input(timeout = 1):
-	userInput = getchar(timeout)
+def check_input():
+	userInput = getchar()
 	if userInput.lower() == "q":
 		sys.exit(0)
 
@@ -79,7 +85,7 @@ def run():
 	process_infos_sub = {}
 	process_infos_last = {}
 	max_item_col = 0
-	while True:
+	while not exit:
 		total_mem = 0
 		print_lines = []
 		if os.path.exists("/proc/stat"):
@@ -390,13 +396,19 @@ def run():
 					height = height - 1
 
 		print("".join(print_strs_fix), end="", flush=True)
-		check_input(1)
 		del(print_lines)
 		del(print_strs_fix)
+		time.sleep(0.5)
+		check_input()
+
+def int_handler(signum, frame):
+	global exit
+	exit = True
 
 if __name__ == '__main__':
 	sys_name = platform.system()
 	if sys_name == "Linux":
+		signal.signal(signal.SIGINT, int_handler)
 		run()
-
-	print("Must run on Linux!!!")
+	else:
+		print("Must run on Linux!!!")
