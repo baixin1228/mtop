@@ -18,6 +18,8 @@ import resource
 import datetime
 
 exit = False
+show_detal = True
+
 def getchar():
 	c = ''
 	fd = sys.stdin.fileno()
@@ -35,9 +37,12 @@ def getchar():
 	return c
 
 def check_input():
+	global show_detal
 	userInput = getchar()
 	if userInput.lower() == "q":
 		sys.exit(0)
+	elif userInput == "1":
+		show_detal = not show_detal
 
 def format_number(number):
 	if number < 1000:
@@ -62,6 +67,7 @@ def format_color(number, div):
 		return {"ctrl_count" : 0, "str" : "%s%%" % str(number)}
 
 def run():
+	# global show_detal
 	cpu_re = re.compile(r"(cpu[0-9]*) *([0-9]+) ([0-9]+) ([0-9]+) ([0-9]+) ([0-9]+) ([0-9]+) ([0-9]+) ([0-9]+) ([0-9]+) ([0-9]+)")
 	meminfo_re = re.compile(r"MemTotal.*?([0-9]+).*kB.*MemFree.*?([0-9]+).*kB.*MemAvailable.*?([0-9]+).*kB.*Buffers.*?([0-9]+).*?kB.*?Cached.*?([0-9]+)", re.S)
 	diskinfo_re = re.compile(r"^ *(8|259) *[0-9]+ (sd[a-zA-Z]+|nvme[0-9]+n[0-9]+) ([0-9]+) ([0-9]+) ([0-9]+) ([0-9]+) ([0-9]+) ([0-9]+) ([0-9]+) ([0-9]+) ([0-9]+) ([0-9]+) ([0-9]+) ([0-9]+) ([0-9]+)", re.M)
@@ -93,9 +99,9 @@ def run():
 				f.seek(0)
 				stat_str = f.read()
 				time_sub = time.time() * 1000 - last_time_ms["proc"]
-				cpu_info_str = cpu_re.finditer(stat_str)
+				cpu_info_iter = cpu_re.finditer(stat_str)
 				
-				for i in cpu_info_str:
+				for i in cpu_info_iter:
 					cpu_info = {}
 					cpu_info["user"] = int(i.group(2))
 					cpu_info["nice"] = int(i.group(3))
@@ -129,7 +135,8 @@ def run():
 						del(cpu_infos_last[key])
 						cpu_infos_last[key] = cpu_info
 						cpu_infos_sub[key] = cpu_info_sub
-				
+
+
 				for key, value in cpu_infos_sub.items():
 					cpu_usage_user = int(value["user"] * 1000 / time_sub )
 					cpu_usage_sys = int(value["system"] * 1000 / time_sub )
@@ -154,14 +161,19 @@ def run():
 							cpu_gov = cpu_gov_f.read()[:-1]
 
 					line = []
+					if key == "cpu":
+						usage_max = 90 * len(cpu_infos_sub)
+					else:
+						usage_max = 90
+
 					line.append([{"ctrl_count" : 0, "str" : key}, {"ctrl_count" : 0, "str" : ""}])
-					line.append([{"ctrl_count" : 0, "str" : "user:"}, format_color(cpu_usage_user, 90)])
-					line.append([{"ctrl_count" : 0, "str" : "sys:"}, format_color(cpu_usage_sys, 90)])
-					line.append([{"ctrl_count" : 0, "str" : "nice:"}, format_color(cpu_usage_nice, 90)])
-					line.append([{"ctrl_count" : 0, "str" : "irq:"}, format_color(cpu_usage_irq, 90)])
-					line.append([{"ctrl_count" : 0, "str" : "soft:"}, format_color(cpu_usage_soft, 90)])
+					line.append([{"ctrl_count" : 0, "str" : "user:"}, format_color(cpu_usage_user, usage_max)])
+					line.append([{"ctrl_count" : 0, "str" : "sys:"}, format_color(cpu_usage_sys, usage_max)])
+					line.append([{"ctrl_count" : 0, "str" : "nice:"}, format_color(cpu_usage_nice, usage_max)])
+					line.append([{"ctrl_count" : 0, "str" : "irq:"}, format_color(cpu_usage_irq, usage_max)])
+					line.append([{"ctrl_count" : 0, "str" : "soft:"}, format_color(cpu_usage_soft, usage_max)])
 					line.append([{"ctrl_count" : 0, "str" : "idle:"}, {"ctrl_count" : 0, "str" : "%s%%" % str(cpu_usage_idle)}])
-					line.append([{"ctrl_count" : 0, "str" : "iowait:"}, format_color(cpu_usage_iowait, 90)])
+					line.append([{"ctrl_count" : 0, "str" : "iowait:"}, format_color(cpu_usage_iowait, usage_max)])
 					line.append([{"ctrl_count" : 0, "str" : "freq:"}, {"ctrl_count" : 0, "str" : format_number(cpu_freq)}])
 					line.append([{"ctrl_count" : 0, "str" : "max:"}, {"ctrl_count" : 0, "str" : format_number(cpu_max)}])
 					line.append([{"ctrl_count" : 0, "str" : "gov:"}, {"ctrl_count" : 0, "str" : cpu_gov}])
@@ -169,6 +181,9 @@ def run():
 						max_item_col = len(line)
 
 					print_lines.append(line)
+					if key == "cpu" and not show_detal:
+						break
+
 			last_time_ms["proc"] = time.time() * 1000
 
 		if os.path.exists("/proc/meminfo"):
@@ -382,7 +397,7 @@ def run():
 
 			col = tty_size[0] - 72
 			if height > 0:
-				print_strs_fix.append(f"\033[7m{'PID':^10}|{'USER':^14}|{'CORE':^4}|{'MEM':^8}|{'%MEM':>5}|{'%CPU':>5}|{'TIME':^8}|{'STATE':^5}| {'COMMAND':<{col}}\033[0m"[:tty_size[0] + 8] + "\n")
+				print_strs_fix.append(f"\033[7m{'PID':^10}|{'USER':^14}|{'CORE':^4}|{'MEM':^8}|{'%MEM':>5}|{'%CPU':^6}|{'TIME':^8}|{'STATE':^5}| {'COMMAND':<{col}}\033[0m"[:tty_size[0] + 8] + "\n")
 				height = height - 1
 
 			process_info_sort = sorted(process_infos_sub.values(), key=lambda d: d["time"], reverse=True)
@@ -392,13 +407,13 @@ def run():
 						pid_user = userid_to_name[item['userid']]
 					else:
 						pid_user = item['userid']
-					print_strs_fix.append(f" {item['pid']:>9}   {pid_user:<12} {item['task_cpu']:>3} {format_number(item['rss']):>7}   {item['mem_usage']:>4.1f}% {item['cpu_usage']:>4.1f}% {item['time_sum']:>8} {item['task_state']:^5}  {item['comm']:<{col}}"[:tty_size[0]] + "\n")
+					print_strs_fix.append(f" {item['pid']:>9}   {pid_user:<12} {item['task_cpu']:>3} {format_number(item['rss']):>7}   {item['mem_usage']:>4.1f}% {item['cpu_usage']:>5.1f}% {item['time_sum']:>8} {item['task_state']:^5}  {item['comm']:<{col}}"[:tty_size[0]] + "\n")
 					height = height - 1
 
 		print("".join(print_strs_fix), end="", flush=True)
 		del(print_lines)
 		del(print_strs_fix)
-		time.sleep(0.5)
+		time.sleep(1)
 		check_input()
 
 def int_handler(signum, frame):
