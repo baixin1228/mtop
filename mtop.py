@@ -91,6 +91,7 @@ def run():
 	process_infos_sub = {}
 	process_infos_last = {}
 	max_item_col = 0
+	print("\033[2J")
 	while not exit:
 		total_mem = 0
 		print_lines = []
@@ -271,8 +272,8 @@ def run():
 			last_time_ms["diskstats"] = time.time() * 1000
 
 		tty_size = os.get_terminal_size()
-		height = tty_size[1] - 1
-		print_strs_fix = ["\033[H\033[2J"]
+		height = tty_size[1] - 2
+		print_strs_fix = ["\033[H"]
 
 		head_width = 5
 		item_width = 13
