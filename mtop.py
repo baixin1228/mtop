@@ -314,7 +314,7 @@ def run():
 
 		tty_size = os.get_terminal_size()
 		height = tty_size[1] - 1
-		print_strs_fix = ["\033[2J\033[H"]
+		print_strs_fix = ["\033[H"]
 
 		head_width = 5
 		item_width = 13
