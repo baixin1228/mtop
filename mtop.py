@@ -44,7 +44,7 @@ def check_input(timeout):
 	userInput = getchar(timeout).lower()
 	if userInput == "q":
 		sys.exit(0)
-	elif userInput == "c":
+	elif userInput == "c" or userInput == "1":
 		cpu_detal = not cpu_detal
 	elif userInput == "d":
 		disk_detal = not disk_detal
@@ -156,15 +156,24 @@ def run():
 					if os.path.exists("/sys/devices/system/cpu/%s/cpufreq/scaling_cur_freq" % key):
 						with open("/sys/devices/system/cpu/%s/cpufreq/scaling_cur_freq" % key, "r") as cpu_freq_f:
 							cpu_freq = int(cpu_freq_f.read()) * 1000
+					elif os.path.exists("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq"):
+						with open("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq", "r") as cpu_freq_f:
+							cpu_freq = int(cpu_freq_f.read()) * 1000
 
 					cpu_max = 0
 					if os.path.exists("/sys/devices/system/cpu/%s/cpufreq/scaling_max_freq" % key):
 						with open("/sys/devices/system/cpu/%s/cpufreq/scaling_max_freq" % key, "r") as cpu_max_f:
 							cpu_max = int(cpu_max_f.read()) * 1000
+					elif os.path.exists("/sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq"):
+						with open("/sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq", "r") as cpu_max_f:
+							cpu_max = int(cpu_max_f.read()) * 1000
 
 					cpu_gov = "-"
 					if os.path.exists("/sys/devices/system/cpu/%s/cpufreq/scaling_governor" % key):
 						with open("/sys/devices/system/cpu/%s/cpufreq/scaling_governor" % key, "r") as cpu_gov_f:
+							cpu_gov = cpu_gov_f.read()[:-1]
+					elif os.path.exists("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor"):
+						with open("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor", "r") as cpu_gov_f:
 							cpu_gov = cpu_gov_f.read()[:-1]
 
 					line = []
@@ -280,9 +289,32 @@ def run():
 					print_lines.append(line)
 			last_time_ms["diskstats"] = time.time() * 1000
 
+		hwmon_idx = 0
+		line = []
+		line.append([{"ctrl_count" : 0, "str" : "temp"}, {"ctrl_count" : 0, "str" : ""}])
+		while True:
+			hwmon_name = ""
+			if os.path.exists("/sys/class/hwmon/hwmon%d/name" % hwmon_idx):
+				with open("/sys/class/hwmon/hwmon%d/name" % hwmon_idx, "r") as hwmon_f:
+					hwmon_name = hwmon_f.read()[:-1]
+			else:
+				break
+
+			hwmon_value = 0
+			if os.path.exists("/sys/class/hwmon/hwmon%d/temp1_input" % hwmon_idx):
+				with open("/sys/class/hwmon/hwmon%d/temp1_input" % hwmon_idx, "r") as hwmon_f:
+					hwmon_value = int(hwmon_f.read()[:-1])
+
+			line.append([{"ctrl_count" : 0, "str" : hwmon_name}, {"ctrl_count" : 0, "str" : f"{hwmon_value/1000:.1f}℃ "}])
+			hwmon_idx = hwmon_idx + 1
+
+		if len(line) > max_item_col:
+			max_item_col = len(line)
+		print_lines.append(line)
+
 		tty_size = os.get_terminal_size()
 		height = tty_size[1] - 1
-		print_strs_fix = ["\033[H"]
+		print_strs_fix = ["\033[2J\033[H"]
 
 		head_width = 5
 		item_width = 13
