@@ -1,4 +1,4 @@
-#!/bin/python3
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 # @Time    : 2023/9/16
 # @Author  : baixin
@@ -16,11 +16,14 @@ import termios
 import platform
 import resource
 import datetime
+import argparse
 
 exit = False
-show_detal = True
+cpu_detal = True
+disk_detal = False
+time_interval = 1
 
-def getchar():
+def getchar(timeout = 1):
 	c = ''
 	fd = sys.stdin.fileno()
 	old_settings = termios.tcgetattr(fd)
@@ -29,20 +32,22 @@ def getchar():
 		# new_term[3] = (new_term[3] & ~termios.ICANON & ~termios.ECHO)
 		new_term[3] = (new_term[3] & ~(termios.ICANON | termios.ECHO))
 		termios.tcsetattr(fd, termios.TCSANOW, new_term)
-		if select.select([sys.stdin], [], [], 0)[0]:
+		if select.select([sys.stdin], [], [], timeout)[0]:
 			c = sys.stdin.read(1)
 	finally:
 		termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 		sys.stdout.flush()
 	return c
 
-def check_input():
-	global show_detal
-	userInput = getchar()
-	if userInput.lower() == "q":
+def check_input(timeout):
+	global cpu_detal, disk_detal
+	userInput = getchar(timeout).lower()
+	if userInput == "q":
 		sys.exit(0)
-	elif userInput == "1":
-		show_detal = not show_detal
+	elif userInput == "c":
+		cpu_detal = not cpu_detal
+	elif userInput == "d":
+		disk_detal = not disk_detal
 
 def format_number(number):
 	if number < 1000:
@@ -67,10 +72,10 @@ def format_color(number, div):
 		return {"ctrl_count" : 0, "str" : "%s%%" % str(number)}
 
 def run():
-	# global show_detal
 	cpu_re = re.compile(r"(cpu[0-9]*) *([0-9]+) ([0-9]+) ([0-9]+) ([0-9]+) ([0-9]+) ([0-9]+) ([0-9]+) ([0-9]+) ([0-9]+) ([0-9]+)")
 	meminfo_re = re.compile(r"MemTotal.*?([0-9]+).*kB.*MemFree.*?([0-9]+).*kB.*MemAvailable.*?([0-9]+).*kB.*Buffers.*?([0-9]+).*?kB.*?Cached.*?([0-9]+)", re.S)
-	diskinfo_re = re.compile(r"^ *(8|259) *[0-9]+ (sd[a-zA-Z]+|nvme[0-9]+n[0-9]+) ([0-9]+) ([0-9]+) ([0-9]+) ([0-9]+) ([0-9]+) ([0-9]+) ([0-9]+) ([0-9]+) ([0-9]+) ([0-9]+) ([0-9]+) ([0-9]+) ([0-9]+)", re.M)
+	diskinfo_re = re.compile(r"^ *(8|259) *[0-9]+ (sd[a-zA-Z]+[0-9]*|nvme[0-9]+n[0-9]+p*[0-9]*) ([0-9]+) ([0-9]+) ([0-9]+) ([0-9]+) ([0-9]+) ([0-9]+) ([0-9]+) ([0-9]+) ([0-9]+) ([0-9]+) ([0-9]+)", re.M)
+	disk_filter= re.compile(r"^sd[a-zA-Z]+$|nvme[0-9]+n[0-9]+$")
 	process_dir_re = re.compile(r"^/proc/[0-9]+", re.M)
 	processinfo_re = re.compile(r"^([0-9]+) \((.+)\) ([A-Z]+) ([\-0-9]+) ([\-0-9]+) ([\-0-9]+) ([\-0-9]+) ([\-0-9]+) ([\-0-9]+) ([\-0-9]+) ([\-0-9]+) ([\-0-9]+) ([\-0-9]+) ([\-0-9]+) ([\-0-9]+) ([\-0-9]+) ([\-0-9]+) ([\-0-9]+) ([\-0-9]+) ([\-0-9]+) ([\-0-9]+) ([\-0-9]+) ([\-0-9]+) ([\-0-9]+) ([\-0-9]+) ([\-0-9]+) ([\-0-9]+) ([\-0-9]+) ([\-0-9]+) ([\-0-9]+) ([\-0-9]+) ([\-0-9]+) ([\-0-9]+) ([\-0-9]+) ([\-0-9]+) ([\-0-9]+) ([\-0-9]+) ([\-0-9]+) ([\-0-9]+) ([\-0-9]+) ([\-0-9]+) ([\-0-9]+) ([\-0-9]+) ([\-0-9]+) ([\-0-9]+) ([\-0-9]+) ", re.M)
 	processstatus_re = re.compile(r"Uid.*?([0-9]+)")
@@ -91,6 +96,7 @@ def run():
 	process_infos_sub = {}
 	process_infos_last = {}
 	max_item_col = 0
+	mode = "all"
 	print("\033[2J")
 	while not exit:
 		total_mem = 0
@@ -182,7 +188,7 @@ def run():
 						max_item_col = len(line)
 
 					print_lines.append(line)
-					if key == "cpu" and not show_detal:
+					if key == "cpu" and not cpu_detal:
 						break
 
 			last_time_ms["proc"] = time.time() * 1000
@@ -214,6 +220,7 @@ def run():
 				diskinfo_str = f.read()
 				time_sub = time.time() * 1000 - last_time_ms["diskstats"]
 				diskinfo_iter = diskinfo_re.finditer(diskinfo_str)
+
 				for i in diskinfo_iter:
 					disk_info = {}
 					disk_info["name"] = i.group(2)
@@ -253,6 +260,8 @@ def run():
 						disk_infos_sub[key] = disk_info_sub
 				
 				for key, value in disk_infos_sub.items():
+					if not disk_filter.match(key) and not disk_detal:
+						continue
 					disk_usage = int(value["io_ticks"] * 100 / time_sub )
 					disk_read_speed = int(value["rd_sectors"] * 512 * 1000 / time_sub )
 					disk_write_speed = int(value["wr_sectors"] * 512 * 1000 / time_sub )
@@ -272,7 +281,7 @@ def run():
 			last_time_ms["diskstats"] = time.time() * 1000
 
 		tty_size = os.get_terminal_size()
-		height = tty_size[1] - 2
+		height = tty_size[1] - 1
 		print_strs_fix = ["\033[H"]
 
 		head_width = 5
@@ -398,7 +407,7 @@ def run():
 
 			col = tty_size[0] - 72
 			if height > 0:
-				print_strs_fix.append(f"\033[7m{'PID':^10}|{'USER':^14}|{'CORE':^4}|{'MEM':^8}|{'%MEM':>5}|{'%CPU':^6}|{'TIME':^8}|{'STATE':^5}| {'COMMAND':<{col}}\033[0m"[:tty_size[0] + 8] + "\n")
+				print_strs_fix.append(f"\033[7m{'PID':^10}|{'USER':^14}|{'CORE':^4}|{'MEM':^8}|{'%MEM':>5}|{'%CPU':^6}|{'TIME':^10}|{'STATE':^5}| {'COMMAND':<{col}}\033[0m"[:tty_size[0] + 8] + "\n")
 				height = height - 1
 
 			process_info_sort = sorted(process_infos_sub.values(), key=lambda d: d["time"], reverse=True)
@@ -408,14 +417,14 @@ def run():
 						pid_user = userid_to_name[item['userid']]
 					else:
 						pid_user = item['userid']
-					print_strs_fix.append(f" {item['pid']:>9}   {pid_user:<12} {item['task_cpu']:>3} {format_number(item['rss']):>7}   {item['mem_usage']:>4.1f}% {item['cpu_usage']:>5.1f}% {item['time_sum']:>8} {item['task_state']:^5}  {item['comm']:<{col}}"[:tty_size[0]] + "\n")
+					print_strs_fix.append(f" {item['pid']:>9}   {pid_user:<12} {item['task_cpu']:>3} {format_number(item['rss']):>7}   {item['mem_usage']:>4.1f}% {item['cpu_usage']:>5.1f}% {item['time_sum']:^10} {item['task_state']:^5}  {item['comm']:<{col}}"[:tty_size[0]] + "\n")
 					height = height - 1
 
 		print("".join(print_strs_fix), end="", flush=True)
 		del(print_lines)
 		del(print_strs_fix)
-		time.sleep(1)
-		check_input()
+		# time.sleep(1)
+		check_input(time_interval)
 
 def int_handler(signum, frame):
 	global exit
@@ -425,6 +434,17 @@ if __name__ == '__main__':
 	sys_name = platform.system()
 	if sys_name == "Linux":
 		signal.signal(signal.SIGINT, int_handler)
+		parser = argparse.ArgumentParser(description='Process some integers.')
+		parser.add_argument('-c', '--cpu-detal', dest = "cpu_detal", default=False,
+			action = "store_true", required = False, help='show every cpu core.')
+		parser.add_argument('-d', '--disk-detal', dest = "disk_detal", default=False,
+			action = "store_true", required = False, help='show every part.')
+		parser.add_argument('-t', '--time-interval', dest = "time_interval", type=float, default=1,
+			required = False, help='refresh frequency')
+		args = parser.parse_args()
+		cpu_detal = args.cpu_detal
+		disk_detal = args.disk_detal
+		time_interval = args.time_interval
 		run()
 	else:
 		print("Must run on Linux!!!")
