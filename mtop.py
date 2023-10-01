@@ -89,11 +89,8 @@ def run():
 				userid_to_name[userid.group(3)] = userid.group(1)
 
 	last_time_ms = {"proc" : 0, "diskstats" : 0, "proc" : 0, "proc" : 0}
-	cpu_infos_sub = {}
 	cpu_infos_last = {}
-	disk_infos_sub = {}
 	disk_infos_last = {}
-	process_infos_sub = {}
 	process_infos_last = {}
 	max_item_col = 0
 	mode = "all"
@@ -108,6 +105,7 @@ def run():
 				time_sub = time.time() * 1000 - last_time_ms["proc"]
 				cpu_info_iter = cpu_re.finditer(stat_str)
 				
+				cpu_infos_sub = {}
 				for i in cpu_info_iter:
 					cpu_info = {}
 					cpu_info["user"] = int(i.group(2))
@@ -136,8 +134,6 @@ def run():
 						cpu_info_sub["steal"] = cpu_info["steal"] - cpu_infos_last[key]["steal"]
 						cpu_info_sub["guest"] = cpu_info["guest"] - cpu_infos_last[key]["guest"]
 						cpu_info_sub["guest_nice"] = cpu_info["guest_nice"] - cpu_infos_last[key]["guest_nice"]
-						if key in cpu_infos_sub:
-							del(cpu_infos_sub[key])
 
 						del(cpu_infos_last[key])
 						cpu_infos_last[key] = cpu_info
@@ -230,6 +226,7 @@ def run():
 				time_sub = time.time() * 1000 - last_time_ms["diskstats"]
 				diskinfo_iter = diskinfo_re.finditer(diskinfo_str)
 
+				disk_infos_sub = {}
 				for i in diskinfo_iter:
 					disk_info = {}
 					disk_info["name"] = i.group(2)
@@ -261,8 +258,6 @@ def run():
 						disk_info_sub["in_flight"] = disk_info["in_flight"] - disk_infos_last[key]["in_flight"]
 						disk_info_sub["io_ticks"] = disk_info["io_ticks"] - disk_infos_last[key]["io_ticks"]
 						disk_info_sub["time_in_queue"] = disk_info["time_in_queue"] - disk_infos_last[key]["time_in_queue"]
-						if key in disk_infos_sub:
-							del(disk_infos_sub[key])
 
 						del(disk_infos_last[key])
 						disk_infos_last[key] = disk_info
@@ -297,6 +292,10 @@ def run():
 			if os.path.exists("/sys/class/hwmon/hwmon%d/name" % hwmon_idx):
 				with open("/sys/class/hwmon/hwmon%d/name" % hwmon_idx, "r") as hwmon_f:
 					hwmon_name = hwmon_f.read()[:-1]
+					if hwmon_name == "k10temp":
+						hwmon_name = "cpu"
+					else:
+						hwmon_name = hwmon_name[:6]
 			else:
 				break
 
@@ -356,7 +355,7 @@ def run():
 		# if height > 0:
 		# 	print_strs_fix.append(str_format.format(*item_str))
 		# 	height = height - 1
-
+		process_infos_sub = {}
 		if os.path.exists("/proc"):
 			for item in os.scandir("/proc"):
 				if item.is_dir():
@@ -424,9 +423,6 @@ def run():
 								process_info_sub["task_rt_priority"] = process_info["task_rt_priority"]
 								process_info_sub["task_policy"] = process_info["task_policy"]
 								process_info_sub["blio_ticks"] = process_info["blio_ticks"] - process_infos_last[key]["blio_ticks"]
-								
-								if key in process_infos_sub:
-									del(process_infos_sub[key])
 
 								del(process_infos_last[key])
 								process_infos_last[key] = process_info
